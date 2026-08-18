@@ -1,0 +1,7 @@
+node_modules/
+uploads/
+*.db
+*.log
+.freebuff/
+.env
+.env.local
