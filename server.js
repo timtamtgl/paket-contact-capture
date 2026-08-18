@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 // NVIDIA API Client
 const client = new OpenAI({
   baseURL: 'https://integrate.api.nvidia.com/v1',
-  apiKey: process.env.NVIDIA_API_KEY || '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',
+  apiKey: process.env.NVIDIA_API_KEY || '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',
 });
 
 // Middleware
@@ -237,7 +237,7 @@ app.post('/api/llm-ocr', upload.single('image'), async (req, res) => {
     console.log('📸 Mengirim gambar ke LLM...');
 
     const completion = await client.chat.completions.create({
-      model: 'meta/muse-glimmer-30b',
+      model: 'nvidia/nemotron-nano-12b-v2-vl',
       messages: [
         {
           role: 'user',
