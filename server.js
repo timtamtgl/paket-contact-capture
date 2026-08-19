@@ -204,6 +204,17 @@ app.post('/api/llm-ocr', upload.single('image'), async (req, res) => {
     }
 
     const dataUrl = fileToBase64(req.file);
+    
+    // Check image size - NVIDIA API has limits
+    const sizeInMB = (dataUrl.length * 3/4) / (1024*1024);
+    console.log('📸 Image size:', sizeInMB.toFixed(2), 'MB');
+    
+    if (sizeInMB > 5) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Gambar terlalu besar (${sizeInMB.toFixed(1)}MB). Maksimal 5MB. Silakan kompres gambar atau ambil foto dengan resolusi lebih rendah.` 
+      });
+    }
 
     console.log('📸 Mengirim gambar ke LLM Vision...');
 
@@ -246,6 +257,9 @@ Format output HANYA dalam JSON tanpa teks tambahan di luar JSON:
       temperature: 0.1
     };
 
+    console.log('📤 Sending image to NVIDIA API...');
+    console.log('📏 Image data length:', dataUrl.length);
+    
     const apiResponse = await fetch(invoke_url, {
       method: 'POST',
       headers: {
@@ -258,7 +272,8 @@ Format output HANYA dalam JSON tanpa teks tambahan di luar JSON:
 
     if (!apiResponse.ok) {
       const errText = await apiResponse.text();
-      throw new Error(`API Error ${apiResponse.status}: ${errText}`);
+      console.error('❌ NVIDIA API Error:', apiResponse.status, errText);
+      throw new Error(`API Error ${apiResponse.status}: ${errText.substring(0, 200)}`);
     }
 
     const completion = await apiResponse.json();
