@@ -214,18 +214,25 @@ app.post('/api/llm-ocr', upload.single('image'), async (req, res) => {
         content: [
           {
             type: "text",
-            text: `Analisis gambar label pengiriman/paket ini. Ekstrak informasi penerima secara akurat.
-Perhatikan struktur kolom. Abaikan data "Pengirim" (Sender). Fokus pada "Penerima" (Recipient).
+            text: `Analisis gambar ini dan ekstrak informasi kontak yang ada. Gambar bisa berupa:
+- Label pengiriman/paket
+- Kartu nama (business card)
+- Dokumen dengan data kontak
+- Foto dengan tulisan nama/alamat
+- Atau gambar lain yang memuat informasi kontak
 
-1. Nama: Cari nama di bawah kata "Penerima"
-2. Alamat lengkap: Gabungkan semua baris alamat penerima (termasuk Catatan Alamat) menjadi satu teks utuh.
-3. Nomor telepon: Cari nomor telepon penerima (biasanya ada tanda *** atau nomor lengkap).
-4. Catatan tambahan: instruksi pengiriman (misal: fragile, dll) atau catatan lain.
+Ekstrak informasi berikut jika tersedia:
+1. Nama: Nama orang/perusahaan yang terlihat
+2. Alamat: Alamat lengkap yang tertulis
+3. Nomor telepon: Nomor telepon yang terlihat
+4. Catatan: Informasi tambahan lainnya
+
+Jika gambar tidak memuat informasi kontak, kembalikan JSON dengan field kosong.
 
 Format output HANYA dalam JSON tanpa teks tambahan di luar JSON:
 {
-  "name": "nama penerima",
-  "address": "alamat penerima lengkap",
+  "name": "nama yang ditemukan",
+  "address": "alamat yang ditemukan",
   "phone": "nomor telepon",
   "notes": "catatan tambahan"
 }`

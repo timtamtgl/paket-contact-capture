@@ -377,6 +377,43 @@ body {
   color: var(--danger-dark);
 }
 
+.ocr-status.warning {
+  background: #fef3c7;
+  color: var(--warning-dark);
+}
+
+/* OCR Raw Response */
+.ocr-raw-response {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--gray-50);
+  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+}
+
+.ocr-raw-response details {
+  font-size: 0.85rem;
+}
+
+.ocr-raw-response summary {
+  cursor: pointer;
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.ocr-raw-response pre {
+  margin-top: 8px;
+  padding: 12px;
+  background: white;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--gray-700);
+  border: 1px solid var(--gray-200);
+}
+
 /* Duplicate Warning */
 .duplicate-warning {
   background: #fef3c7;

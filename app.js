@@ -214,8 +214,23 @@ document.getElementById('llmOcrBtn').addEventListener('click', async () => {
       document.getElementById('phone').value = data.phone || '';
       document.getElementById('notes').value = data.notes || '';
 
-      ocrStatus.className = 'ocr-status success';
-      ocrStatus.innerHTML = `✅ AI Vision berhasil membaca gambar!`;
+      // Show status with raw response
+      const hasData = data.name || data.address || data.phone;
+      if (hasData) {
+        ocrStatus.className = 'ocr-status success';
+        ocrStatus.innerHTML = `✅ AI Vision berhasil membaca gambar!`;
+      } else {
+        ocrStatus.className = 'ocr-status warning';
+        ocrStatus.innerHTML = `⚠️ AI Vision tidak menemukan data kontak di gambar. Silakan isi manual atau coba foto lain.`;
+      }
+
+      // Show raw response if available
+      if (data.raw_response) {
+        const rawDiv = document.createElement('div');
+        rawDiv.className = 'ocr-raw-response';
+        rawDiv.innerHTML = `<details><summary>📝 Hasil mentah AI</summary><pre>${escapeHtml(data.raw_response)}</pre></details>`;
+        ocrStatus.parentNode.insertBefore(rawDiv, ocrStatus.nextSibling);
+      }
 
       // Check for duplicates
       if (data.name) {
