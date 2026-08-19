@@ -4,27 +4,38 @@ const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
 const db = require('./database');
-const OpenAI = require('openai');
+
+let OpenAI;
+try {
+  OpenAI = require('openai');
+} catch (e) {
+  console.warn('⚠️ openai package not found, NVIDIA API disabled');
+  OpenAI = null;
+}
 
 const app = express();
 const IS_VERCEL = !!process.env.VERCEL;
 
 // NVIDIA API Client
-const client = new OpenAI({
-  baseURL: 'https://integrate.api.nvidia.com/v1',
-  apiKey: process.env.NVIDIA_API_KEY || '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',
-});
+let client = null;
+if (OpenAI) {
+  client = new OpenAI({
+    baseURL: 'https://integrate.api.nvidia.com/v1',
+    apiKey: process.env.NVIDIA_API_KEY || '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',
+  });
+}
 
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static files - only serve locally
+// Static files - use absolute path for Vercel compatibility
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Create uploads directory if not exists (local only)
 if (!IS_VERCEL) {
-  app.use(express.static('public'));
-  app.use('/uploads', express.static('uploads'));
-  
   const uploadsDir = path.join(__dirname, 'uploads');
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
@@ -186,6 +197,11 @@ app.post('/api/llm-ocr', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'Tidak ada file yang diupload' });
 
+    // Check if OpenAI client is available
+    if (!client) {
+      return res.status(500).json({ success: false, error: 'NVIDIA Vision API tidak tersedia. Pastikan openai package terinstall.' });
+    }
+
     const dataUrl = fileToBase64(req.file);
 
     console.log('📸 Mengirim gambar ke LLM Vision...');
@@ -326,7 +342,7 @@ app.put('/api/contacts/:id/location', (req, res) => {
 // Redirect /app to /app.html
 app.get('/app', (req, res) => { res.redirect('/app.html'); });
 
-// Serve index.html for all other routes (local only)
+// Serve index.html for all other non-API routes (local dev only)
 if (!IS_VERCEL) {
   app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 }

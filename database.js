@@ -1,12 +1,11 @@
-const initSqlJs = require('sql.js');
+const IS_VERCEL = !!process.env.VERCEL;
 
 let db = null;
+let sqlJsReady = false;
 let inMemoryContacts = [];
 let inMemoryCheckins = [];
 let nextContactId = 1;
 let nextCheckinId = 1;
-
-const IS_VERCEL = !!process.env.VERCEL;
 
 function getTodayDate() {
   const now = new Date();
@@ -14,60 +13,60 @@ function getTodayDate() {
 }
 
 async function initDatabase() {
-  const SQL = await initSqlJs();
-  
-  if (!IS_VERCEL) {
-    const fs = require('fs');
-    const path = require('path');
-    const DB_PATH = path.join(__dirname, 'contacts.db');
-    
-    if (fs.existsSync(DB_PATH)) {
-      const fileBuffer = fs.readFileSync(DB_PATH);
-      db = new SQL.Database(fileBuffer);
-    } else {
-      db = new SQL.Database();
-    }
-    
-    db.run(`
-      CREATE TABLE IF NOT EXISTS contacts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        address TEXT NOT NULL,
-        phone TEXT,
-        notes TEXT,
-        image_path TEXT,
-        latitude REAL,
-        longitude REAL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    
-    db.run(`
-      CREATE TABLE IF NOT EXISTS daily_checkins (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        contact_id INTEGER NOT NULL,
-        checkin_date DATE NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
-        UNIQUE(contact_id, checkin_date)
-      )
-    `);
-    
-    saveDatabase();
-    
-    // Auto-save every 30 seconds (local only, NOT on Vercel)
-    setInterval(() => { saveDatabase(); }, 30000);
-    process.on('exit', () => saveDatabase());
-    process.on('SIGINT', () => { saveDatabase(); process.exit(); });
-    process.on('SIGTERM', () => { saveDatabase(); process.exit(); });
+  if (IS_VERCEL) {
+    console.log('⚠️ Vercel mode: in-memory storage');
+    return null;
   }
-  
-  console.log(IS_VERCEL ? '⚠️ Vercel mode: in-memory storage' : '✅ SQLite file-based storage');
+
+  // Lazy-load sql.js only on local
+  const initSqlJs = require('sql.js');
+  const fs = require('fs');
+  const path = require('path');
+  const DB_PATH = path.join(__dirname, 'contacts.db');
+
+  const SQL = await initSqlJs();
+
+  if (fs.existsSync(DB_PATH)) {
+    const fileBuffer = fs.readFileSync(DB_PATH);
+    db = new SQL.Database(fileBuffer);
+  } else {
+    db = new SQL.Database();
+  }
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS contacts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      address TEXT NOT NULL,
+      phone TEXT,
+      notes TEXT,
+      image_path TEXT,
+      latitude REAL,
+      longitude REAL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS daily_checkins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      contact_id INTEGER NOT NULL,
+      checkin_date DATE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
+      UNIQUE(contact_id, checkin_date)
+    )
+  `);
+
+  saveDatabase();
+  sqlJsReady = true;
+
+  console.log('✅ SQLite file-based storage');
   return db;
 }
 
 function saveDatabase() {
-  if (db && !IS_VERCEL) {
+  if (db && sqlJsReady && !IS_VERCEL) {
     const fs = require('fs');
     const path = require('path');
     const data = db.export();
@@ -78,7 +77,7 @@ function saveDatabase() {
 
 module.exports = {
   initDatabase,
-  
+
   getAllContacts() {
     if (IS_VERCEL) {
       return [...inMemoryContacts].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -205,14 +204,14 @@ module.exports = {
 
   checkinContact(contactId, date = null) {
     const checkinDate = date || getTodayDate();
-    
+
     if (IS_VERCEL) {
       const existing = inMemoryCheckins.find(c => c.contact_id === parseInt(contactId) && c.checkin_date === checkinDate);
       if (existing) return { success: true, message: 'Sudah check-in', alreadyCheckedIn: true };
       inMemoryCheckins.push({ id: nextCheckinId++, contact_id: parseInt(contactId), checkin_date: checkinDate, created_at: new Date().toISOString() });
       return { success: true, message: 'Check-in berhasil', alreadyCheckedIn: false };
     }
-    
+
     const existing = db.exec('SELECT id FROM daily_checkins WHERE contact_id = ? AND checkin_date = ?', [parseInt(contactId), checkinDate]);
     if (existing.length > 0 && existing[0].values.length > 0) {
       return { success: true, message: 'Sudah check-in', alreadyCheckedIn: true };
@@ -224,7 +223,7 @@ module.exports = {
 
   getDailyCheckins(date = null) {
     const checkinDate = date || getTodayDate();
-    
+
     if (IS_VERCEL) {
       return inMemoryCheckins
         .filter(c => c.checkin_date === checkinDate)
@@ -235,7 +234,7 @@ module.exports = {
         .filter(Boolean)
         .sort((a, b) => new Date(b.checkin_time) - new Date(a.checkin_time));
     }
-    
+
     const results = db.exec(
       'SELECT c.*, dc.checkin_date, dc.created_at as checkin_time FROM contacts c INNER JOIN daily_checkins dc ON c.id = dc.contact_id WHERE dc.checkin_date = ? ORDER BY dc.created_at DESC',
       [checkinDate]
