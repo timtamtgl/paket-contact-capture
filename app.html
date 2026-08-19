@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>📸 Contact Capture - Pencatat Nama & Alamat dari Foto</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <a href="/" style="color:white;text-decoration:none;font-size:0.85rem;opacity:0.8;">← Kembali ke Beranda</a>
+      <h1>📸 Contact Capture</h1>
+      <p class="subtitle">Ambil foto → Baca nama & alamat → Simpan</p>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="capture">📷 Ambil Foto</button>
+      <button class="tab" data-tab="daily">📅 Hari Ini</button>
+      <button class="tab" data-tab="contacts">📋 Semua Kontak</button>
+      <button class="tab" data-tab="history">📆 Riwayat</button>
+    </nav>
+
+    <!-- Capture Section -->
+    <section id="capture" class="tab-content active">
+      <div class="card">
+        <h2>📸 Ambil atau Upload Foto</h2>
+        <p class="hint">Foto kartu nama, dokumen, atau tulisan yang berisi nama dan alamat</p>
+        
+        <!-- Camera Preview -->
+        <div class="camera-container">
+          <video id="cameraPreview" autoplay playsinline></video>
+          <canvas id="cameraCanvas" style="display:none;"></canvas>
+        </div>
+        
+        <!-- Capture Buttons -->
+        <div class="button-group">
+          <button id="startCamera" class="btn btn-primary">🎥 Mulai Kamera</button>
+          <button id="captureBtn" class="btn btn-success" style="display:none;">📸 Ambil Foto</button>
+          <button id="stopCamera" class="btn btn-danger" style="display:none;">⏹️ Matikan</button>
+        </div>
+        
+        <!-- Or Upload -->
+        <div class="divider">
+          <span>atau</span>
+        </div>
+        
+        <div class="upload-area" id="uploadArea">
+          <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none;">
+          <button id="uploadBtn" class="btn btn-secondary">📁 Upload Foto</button>
+          <p class="hint">Format: JPG, PNG, GIF, WebP (Maks 10MB)</p>
+        </div>
+
+        <!-- Preview Image -->
+        <div id="imagePreview" class="image-preview" style="display:none;">
+          <img id="previewImg" src="" alt="Preview">
+          <button id="clearImage" class="btn btn-small btn-danger">✕ Hapus</button>
+          <button id="llmOcrBtn" class="btn btn-info btn-block">🤖 Proses dengan AI Vision (NVIDIA)</button>
+        </div>
+      </div>
+
+      <!-- OCR Result -->
+      <div class="card" id="ocrResult" style="display:none;">
+        <h2>🤖 Hasil Pembacaan OCR</h2>
+        <div class="ocr-status" id="ocrStatus">Memproses gambar...</div>
+        
+        <!-- Duplicate Warning -->
+        <div id="duplicateWarning" class="duplicate-warning" style="display:none;">
+          <p>⚠️ <strong>Kontak serupa ditemukan!</strong></p>
+          <div id="similarContacts"></div>
+          <button id="useExistingBtn" class="btn btn-success btn-block">✅ Gunakan yang Sudah Ada</button>
+          <button id="addNewBtn" class="btn btn-primary btn-block">➕ Tambah Baru</button>
+        </div>
+        
+        <form id="contactForm">
+          <div class="form-group">
+            <label for="name">👤 Nama</label>
+            <input type="text" id="name" name="name" placeholder="Masukkan nama" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="address">📍 Alamat</label>
+            <textarea id="address" name="address" placeholder="Masukkan alamat lengkap" rows="3" required></textarea>
+          </div>
+          
+          <div class="form-group">
+            <label for="phone">📞 Telepon (Opsional)</label>
+            <input type="tel" id="phone" name="phone" placeholder="Nomor telepon">
+          </div>
+          
+          <div class="form-group">
+            <label for="notes">📝 Catatan (Opsional)</label>
+            <textarea id="notes" name="notes" placeholder="Tambahkan catatan" rows="2"></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group half">
+              <label for="latitude">Latitude</label>
+              <input type="number" id="latitude" name="latitude" step="any" placeholder="Contoh: -6.2088">
+            </div>
+            <div class="form-group half">
+              <label for="longitude">Longitude</label>
+              <input type="number" id="longitude" name="longitude" step="any" placeholder="Contoh: 106.8456">
+            </div>
+          </div>
+          
+          <button type="submit" class="btn btn-primary btn-block">💾 Simpan & Check-in Hari Ini</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Daily View Section -->
+    <section id="daily" class="tab-content">
+      <div class="card">
+        <h2>📅 Daftar Kontak Hari Ini</h2>
+        <p class="date-display" id="todayDate"></p>
+        
+        <div id="dailyStats" class="stats">
+          <div class="stat-item">
+            <span class="stat-number" id="dailyCount">0</span>
+            <span class="stat-label">Kontak</span>
+          </div>
+        </div>
+        
+        <div id="dailyList" class="contact-list">
+          <p class="empty-state">Belum ada kontak hari ini</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- All Contacts Section -->
+    <section id="contacts" class="tab-content">
+      <div class="card">
+        <h2>📋 Semua Kontak Tersimpan</h2>
+        
+        <!-- Search -->
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="🔍 Cari nama atau alamat...">
+        </div>
+        
+        <!-- Contact List -->
+        <div id="allContactsList" class="contact-list">
+          <p class="empty-state">Belum ada kontak tersimpan</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- History Section -->
+    <section id="history" class="tab-content">
+      <div class="card">
+        <h2>📆 Riwayat Check-in</h2>
+        <div id="historyList" class="history-list">
+          <p class="empty-state">Belum ada riwayat</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display:none;">
+      <div class="spinner"></div>
+      <p id="loadingText">Memproses gambar dengan AI OCR...</p>
+    </div>
+  </div>
+
+  <!-- Tesseract.js for OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="app.js?v=3"></script>
+</body>
+</html>
