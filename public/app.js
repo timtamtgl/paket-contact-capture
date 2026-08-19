@@ -62,6 +62,53 @@ function updateDateDisplay() {
   todayDateEl.textContent = now.toLocaleDateString('id-ID', options);
 }
 
+// ==================== IMAGE COMPRESSION ====================
+async function compressImage(fileOrBlob) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Max dimension 800px
+        const MAX_SIZE = 800;
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Export as low quality JPEG
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        fetch(dataUrl)
+          .then(res => res.blob())
+          .then(blob => {
+            resolve({
+              file: new File([blob], 'compressed.jpg', { type: 'image/jpeg' }),
+              dataUrl: dataUrl
+            });
+          });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(fileOrBlob);
+  });
+}
+
 // ==================== CAMERA FUNCTIONS ====================
 startCameraBtn.addEventListener('click', async () => {
   try {
@@ -92,15 +139,15 @@ captureBtn.addEventListener('click', () => {
   cameraCanvas.height = cameraPreview.videoHeight;
   context.drawImage(cameraPreview, 0, 0);
   
-  currentImageDataUrl = cameraCanvas.toDataURL('image/jpeg', 0.9);
-  previewImg.src = currentImageDataUrl;
-  imagePreview.style.display = 'block';
-  
-  // Convert data URL to file
-  fetch(currentImageDataUrl)
+  const rawDataUrl = cameraCanvas.toDataURL('image/jpeg', 0.9);
+  fetch(rawDataUrl)
     .then(res => res.blob())
-    .then(blob => {
-      currentImageFile = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
+    .then(async blob => {
+      const compressed = await compressImage(blob);
+      currentImageFile = compressed.file;
+      currentImageDataUrl = compressed.dataUrl;
+      previewImg.src = currentImageDataUrl;
+      imagePreview.style.display = 'block';
       processImage();
     });
 });
@@ -122,19 +169,17 @@ uploadBtn.addEventListener('click', () => {
   fileInput.click();
 });
 
-fileInput.addEventListener('change', (e) => {
+fileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (file) {
-    currentImageFile = file;
-    
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      currentImageDataUrl = event.target.result;
-      previewImg.src = currentImageDataUrl;
-      imagePreview.style.display = 'block';
-      processImage();
-    };
-    reader.readAsDataURL(file);
+    showLoading(true, 'Mengompresi gambar...');
+    const compressed = await compressImage(file);
+    currentImageFile = compressed.file;
+    currentImageDataUrl = compressed.dataUrl;
+    previewImg.src = currentImageDataUrl;
+    imagePreview.style.display = 'block';
+    processImage();
+    showLoading(false);
   }
 });
 
@@ -154,7 +199,7 @@ document.getElementById('llmOcrBtn').addEventListener('click', async () => {
     const formData = new FormData();
     formData.append('image', currentImageFile);
 
-    const response = await fetch('/api/llm-ocr', {
+    const response = await fetch('api/llm-ocr', {
       method: 'POST',
       body: formData
     });
@@ -164,10 +209,10 @@ document.getElementById('llmOcrBtn').addEventListener('click', async () => {
     if (result.success) {
       const data = result.data;
 
-      document.getElementById('name').value = data.name;
-      document.getElementById('address').value = data.address;
-      document.getElementById('phone').value = data.phone;
-      document.getElementById('notes').value = data.notes;
+      document.getElementById('name').value = data.name || '';
+      document.getElementById('address').value = data.address || '';
+      document.getElementById('phone').value = data.phone || '';
+      document.getElementById('notes').value = data.notes || '';
 
       ocrStatus.className = 'ocr-status success';
       ocrStatus.innerHTML = `✅ AI Vision berhasil membaca gambar!`;
@@ -205,7 +250,7 @@ useExistingBtn.addEventListener('click', async () => {
   if (!existingContactId) return;
   
   try {
-    const response = await fetch('/api/daily/checkin', {
+    const response = await fetch('api/daily/checkin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contact_id: existingContactId })
@@ -301,7 +346,7 @@ async function processImage() {
 // Check for duplicate contacts
 async function checkForDuplicates(name) {
   try {
-    const response = await fetch(`/api/check-duplicate?name=${encodeURIComponent(name)}`);
+    const response = await fetch(`api/check-duplicate?name=${encodeURIComponent(name)}`);
     const result = await response.json();
     
     if (result.success && result.data.length > 0) {
@@ -409,7 +454,7 @@ contactForm.addEventListener('submit', async (e) => {
   }
   
   try {
-    const response = await fetch('/api/contacts', {
+    const response = await fetch('api/contacts', {
       method: 'POST',
       body: formData
     });
@@ -445,7 +490,7 @@ contactForm.addEventListener('submit', async (e) => {
 // ==================== DAILY VIEW ====================
 async function loadDailyCheckins() {
   try {
-    const response = await fetch('/api/daily');
+    const response = await fetch('api/daily');
     const result = await response.json();
     
     if (result.success && result.data.length > 0) {
@@ -506,7 +551,7 @@ async function undoCheckin(contactId) {
   if (!confirm('Yakin ingin membatalkan check-in ini?')) return;
   
   try {
-    const response = await fetch('/api/daily/checkin', {
+    const response = await fetch('api/daily/checkin', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contact_id: contactId })
@@ -540,7 +585,7 @@ async function updateLocation(contactId) {
       const { latitude, longitude } = position.coords;
       
       try {
-        const response = await fetch(`/api/contacts/${contactId}/location`, {
+        const response = await fetch(`api/contacts/${contactId}/location`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ latitude, longitude })
@@ -651,7 +696,7 @@ function createAllContactCard(contact) {
 
 async function checkinExisting(contactId) {
   try {
-    const response = await fetch('/api/daily/checkin', {
+    const response = await fetch('api/daily/checkin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contact_id: contactId })
@@ -680,7 +725,7 @@ async function deleteContact(id) {
   if (!confirm('Yakin ingin menghapus kontak ini?')) return;
   
   try {
-    const response = await fetch(`/api/contacts/${id}`, {
+    const response = await fetch(`api/contacts/${id}`, {
       method: 'DELETE'
     });
     
@@ -709,7 +754,7 @@ searchInput.addEventListener('input', (e) => {
 // ==================== HISTORY ====================
 async function loadHistory() {
   try {
-    const response = await fetch('/api/daily/history');
+    const response = await fetch('api/daily/history');
     const result = await response.json();
     
     if (result.success && result.data.length > 0) {
@@ -741,7 +786,7 @@ function formatDate(dateStr) {
 
 async function loadDayCheckins(date) {
   try {
-    const response = await fetch(`/api/daily?date=${date}`);
+    const response = await fetch(`api/daily?date=${date}`);
     const result = await response.json();
     
     if (result.success) {
