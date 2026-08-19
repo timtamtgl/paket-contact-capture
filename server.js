@@ -25,25 +25,17 @@ if (!IS_VERCEL) {
   app.use(express.static('public'));
   app.use('/uploads', express.static('uploads'));
   
-  // Create uploads directory if not exists
   const uploadsDir = path.join(__dirname, 'uploads');
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
 }
 
-// Configure multer - memory storage for Vercel, disk for local
+// Configure multer
 const upload = IS_VERCEL 
   ? multer({ 
       storage: multer.memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024 },
-      fileFilter: (req, file, cb) => {
-        const allowedTypes = /jpeg|jpg|png|gif|webp/;
-        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-        const mimetype = allowedTypes.test(file.mimetype);
-        if (extname && mimetype) return cb(null, true);
-        cb(new Error('Hanya file gambar yang diizinkan'));
-      }
+      limits: { fileSize: 10 * 1024 * 1024 }
     })
   : multer({
       storage: multer.diskStorage({
@@ -52,22 +44,29 @@ const upload = IS_VERCEL
           cb(null, Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname));
         }
       }),
-      limits: { fileSize: 10 * 1024 * 1024 },
-      fileFilter: (req, file, cb) => {
-        const allowedTypes = /jpeg|jpg|png|gif|webp/;
-        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-        const mimetype = allowedTypes.test(file.mimetype);
-        if (extname && mimetype) return cb(null, true);
-        cb(new Error('Hanya file gambar yang diizinkan'));
-      }
+      limits: { fileSize: 10 * 1024 * 1024 }
     });
+
+// Lazy init database (once, on first request)
+let dbInitialized = false;
+app.use(async (req, res, next) => {
+  if (!dbInitialized) {
+    try {
+      await db.initDatabase();
+      dbInitialized = true;
+      console.log('✅ Database initialized');
+    } catch (err) {
+      console.error('DB init error:', err);
+    }
+  }
+  next();
+});
 
 // Helper: convert file to base64
 function fileToBase64(file) {
   if (IS_VERCEL && file.buffer) {
     return `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
   }
-  // Local: read from disk
   const imagePath = path.join(__dirname, 'uploads', file.filename);
   const imageBuffer = fs.readFileSync(imagePath);
   return `data:${file.mimetype};base64,${imageBuffer.toString('base64')}`;
@@ -332,28 +331,28 @@ if (!IS_VERCEL) {
   app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 }
 
-// ==================== SERVER START ====================
+// ==================== LOCAL SERVER START ====================
 
-async function startServer() {
-  try {
-    console.log('🔧 Menginisialisasi database...');
-    await db.initDatabase();
-    console.log('✅ Database berhasil diinisialisasi');
-    
-    if (!IS_VERCEL) {
+if (!IS_VERCEL) {
+  async function startServer() {
+    try {
+      console.log('🔧 Menginisialisasi database...');
+      await db.initDatabase();
+      dbInitialized = true;
+      console.log('✅ Database berhasil diinisialisasi');
+      
       const PORT = process.env.PORT || 3000;
       app.listen(PORT, () => {
         console.log(`\n🚀 Server berjalan di http://localhost:${PORT}`);
         console.log(`📱 Buka di HP untuk akses kamera\n`);
       });
+    } catch (error) {
+      console.error('❌ Gagal memulai server:', error);
+      process.exit(1);
     }
-  } catch (error) {
-    console.error('❌ Gagal memulai server:', error);
-    process.exit(1);
   }
+  startServer();
 }
-
-startServer();
 
 // Export for Vercel serverless
 module.exports = app;

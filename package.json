@@ -2,10 +2,11 @@
   "name": "contact-capture",
   "version": "1.0.0",
   "description": "Sistem pencatat nama & alamat dari foto kamera HP dengan OCR",
-  "main": "server.js",
+  "main": "api/index.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "vercel-build": "echo OK"
   },
   "dependencies": {
     "cors": "^2.8.5",

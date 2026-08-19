@@ -8,18 +8,15 @@ let nextCheckinId = 1;
 
 const IS_VERCEL = !!process.env.VERCEL;
 
-// Helper function to get today's date
 function getTodayDate() {
   const now = new Date();
   return now.toISOString().split('T')[0];
 }
 
-// Initialize database
 async function initDatabase() {
   const SQL = await initSqlJs();
   
   if (!IS_VERCEL) {
-    // Local: use file-based SQLite
     const fs = require('fs');
     const path = require('path');
     const DB_PATH = path.join(__dirname, 'contacts.db');
@@ -58,31 +55,29 @@ async function initDatabase() {
     
     saveDatabase();
     
-    // Auto-save every 30 seconds (local only)
+    // Auto-save every 30 seconds (local only, NOT on Vercel)
     setInterval(() => { saveDatabase(); }, 30000);
     process.on('exit', () => saveDatabase());
     process.on('SIGINT', () => { saveDatabase(); process.exit(); });
     process.on('SIGTERM', () => { saveDatabase(); process.exit(); });
   }
   
-  console.log(IS_VERCEL ? '⚠️ Vercel mode: in-memory storage (data will reset on cold start)' : '✅ SQLite file-based storage');
+  console.log(IS_VERCEL ? '⚠️ Vercel mode: in-memory storage' : '✅ SQLite file-based storage');
   return db;
 }
 
-// Save database to file (local only)
 function saveDatabase() {
   if (db && !IS_VERCEL) {
     const fs = require('fs');
+    const path = require('path');
     const data = db.export();
     const buffer = Buffer.from(data);
-    fs.writeFileSync(require('path').join(__dirname, 'contacts.db'), buffer);
+    fs.writeFileSync(path.join(__dirname, 'contacts.db'), buffer);
   }
 }
 
 module.exports = {
   initDatabase,
-  
-  // ==================== CONTACTS ====================
   
   getAllContacts() {
     if (IS_VERCEL) {
@@ -90,7 +85,10 @@ module.exports = {
     }
     const results = db.exec('SELECT * FROM contacts ORDER BY created_at DESC');
     if (results.length === 0) return [];
-    return results[0].values.map(mapContact);
+    return results[0].values.map(row => ({
+      id: row[0], name: row[1], address: row[2], phone: row[3], notes: row[4],
+      image_path: row[5], latitude: row[6], longitude: row[7], created_at: row[8]
+    }));
   },
 
   getContactById(id) {
@@ -99,29 +97,24 @@ module.exports = {
     }
     const results = db.exec('SELECT * FROM contacts WHERE id = ?', [parseInt(id)]);
     if (results.length === 0 || results[0].values.length === 0) return null;
-    return mapContact(results[0].values[0]);
+    const row = results[0].values[0];
+    return { id: row[0], name: row[1], address: row[2], phone: row[3], notes: row[4], image_path: row[5], latitude: row[6], longitude: row[7], created_at: row[8] };
   },
 
   insertContact({ name, address, phone, notes, image_path, latitude, longitude }) {
     if (IS_VERCEL) {
       const contact = {
-        id: nextContactId++,
-        name,
-        address,
-        phone: phone || null,
-        notes: notes || null,
+        id: nextContactId++, name, address,
+        phone: phone || null, notes: notes || null,
         image_path: image_path || null,
-        latitude: latitude || null,
-        longitude: longitude || null,
+        latitude: latitude || null, longitude: longitude || null,
         created_at: new Date().toISOString()
       };
       inMemoryContacts.push(contact);
       return { id: contact.id };
     }
-    
     db.run(
-      `INSERT INTO contacts (name, address, phone, notes, image_path, latitude, longitude)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      'INSERT INTO contacts (name, address, phone, notes, image_path, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [name, address, phone || null, notes || null, image_path || null, latitude || null, longitude || null]
     );
     const result = db.exec('SELECT last_insert_rowid() as id');
@@ -139,7 +132,7 @@ module.exports = {
       return;
     }
     db.run(
-      `UPDATE contacts SET name = ?, address = ?, phone = ?, notes = ?, latitude = ?, longitude = ? WHERE id = ?`,
+      'UPDATE contacts SET name = ?, address = ?, phone = ?, notes = ?, latitude = ?, longitude = ? WHERE id = ?',
       [name, address, phone || null, notes || null, latitude || null, longitude || null, parseInt(id)]
     );
     saveDatabase();
@@ -148,10 +141,7 @@ module.exports = {
   updateContactLocation(id, latitude, longitude) {
     if (IS_VERCEL) {
       const idx = inMemoryContacts.findIndex(c => c.id === parseInt(id));
-      if (idx !== -1) {
-        inMemoryContacts[idx].latitude = latitude;
-        inMemoryContacts[idx].longitude = longitude;
-      }
+      if (idx !== -1) { inMemoryContacts[idx].latitude = latitude; inMemoryContacts[idx].longitude = longitude; }
       return;
     }
     db.run('UPDATE contacts SET latitude = ?, longitude = ? WHERE id = ?', [latitude, longitude, parseInt(id)]);
@@ -172,16 +162,14 @@ module.exports = {
   searchContacts(query) {
     if (IS_VERCEL) {
       const q = query.toLowerCase();
-      return inMemoryContacts.filter(c => 
-        c.name.toLowerCase().includes(q) || c.address.toLowerCase().includes(q)
-      );
+      return inMemoryContacts.filter(c => c.name.toLowerCase().includes(q) || c.address.toLowerCase().includes(q));
     }
-    const results = db.exec(
-      `SELECT * FROM contacts WHERE name LIKE ? OR address LIKE ? ORDER BY created_at DESC`,
-      [`%${query}%`, `%${query}%`]
-    );
+    const results = db.exec('SELECT * FROM contacts WHERE name LIKE ? OR address LIKE ? ORDER BY created_at DESC', [`%${query}%`, `%${query}%`]);
     if (results.length === 0) return [];
-    return results[0].values.map(mapContact);
+    return results[0].values.map(row => ({
+      id: row[0], name: row[1], address: row[2], phone: row[3], notes: row[4],
+      image_path: row[5], latitude: row[6], longitude: row[7], created_at: row[8]
+    }));
   },
 
   findContactByName(name) {
@@ -190,7 +178,8 @@ module.exports = {
     }
     const results = db.exec('SELECT * FROM contacts WHERE LOWER(name) = LOWER(?)', [name]);
     if (results.length === 0 || results[0].values.length === 0) return null;
-    return mapContact(results[0].values[0]);
+    const row = results[0].values[0];
+    return { id: row[0], name: row[1], address: row[2], phone: row[3], notes: row[4], image_path: row[5], latitude: row[6], longitude: row[7], created_at: row[8] };
   },
 
   findSimilarContacts(name) {
@@ -204,47 +193,30 @@ module.exports = {
       });
     }
     const results = db.exec(
-      `SELECT * FROM contacts 
-       WHERE LOWER(name) LIKE LOWER(?) 
-       OR LOWER(name) LIKE LOWER(?)
-       OR LOWER(name) LIKE LOWER(?)
-       ORDER BY created_at DESC`,
+      'SELECT * FROM contacts WHERE LOWER(name) LIKE LOWER(?) OR LOWER(name) LIKE LOWER(?) OR LOWER(name) LIKE LOWER(?) ORDER BY created_at DESC',
       [`%${name}%`, `%${name.split(' ')[0]}%`, `%${name.split(' ').pop()}%`]
     );
     if (results.length === 0) return [];
-    return results[0].values.map(mapContact);
+    return results[0].values.map(row => ({
+      id: row[0], name: row[1], address: row[2], phone: row[3], notes: row[4],
+      image_path: row[5], latitude: row[6], longitude: row[7], created_at: row[8]
+    }));
   },
 
-  // ==================== DAILY CHECKINS ====================
-  
   checkinContact(contactId, date = null) {
     const checkinDate = date || getTodayDate();
     
     if (IS_VERCEL) {
-      const existing = inMemoryCheckins.find(c => 
-        c.contact_id === parseInt(contactId) && c.checkin_date === checkinDate
-      );
-      if (existing) {
-        return { success: true, message: 'Sudah check-in hari ini', alreadyCheckedIn: true };
-      }
-      inMemoryCheckins.push({
-        id: nextCheckinId++,
-        contact_id: parseInt(contactId),
-        checkin_date: checkinDate,
-        created_at: new Date().toISOString()
-      });
+      const existing = inMemoryCheckins.find(c => c.contact_id === parseInt(contactId) && c.checkin_date === checkinDate);
+      if (existing) return { success: true, message: 'Sudah check-in', alreadyCheckedIn: true };
+      inMemoryCheckins.push({ id: nextCheckinId++, contact_id: parseInt(contactId), checkin_date: checkinDate, created_at: new Date().toISOString() });
       return { success: true, message: 'Check-in berhasil', alreadyCheckedIn: false };
     }
     
-    const existing = db.exec(
-      'SELECT id FROM daily_checkins WHERE contact_id = ? AND checkin_date = ?',
-      [parseInt(contactId), checkinDate]
-    );
-    
+    const existing = db.exec('SELECT id FROM daily_checkins WHERE contact_id = ? AND checkin_date = ?', [parseInt(contactId), checkinDate]);
     if (existing.length > 0 && existing[0].values.length > 0) {
-      return { success: true, message: 'Sudah check-in hari ini', alreadyCheckedIn: true };
+      return { success: true, message: 'Sudah check-in', alreadyCheckedIn: true };
     }
-    
     db.run('INSERT INTO daily_checkins (contact_id, checkin_date) VALUES (?, ?)', [parseInt(contactId), checkinDate]);
     saveDatabase();
     return { success: true, message: 'Check-in berhasil', alreadyCheckedIn: false };
@@ -265,11 +237,7 @@ module.exports = {
     }
     
     const results = db.exec(
-      `SELECT c.*, dc.checkin_date, dc.created_at as checkin_time
-       FROM contacts c
-       INNER JOIN daily_checkins dc ON c.id = dc.contact_id
-       WHERE dc.checkin_date = ?
-       ORDER BY dc.created_at DESC`,
+      'SELECT c.*, dc.checkin_date, dc.created_at as checkin_time FROM contacts c INNER JOIN daily_checkins dc ON c.id = dc.contact_id WHERE dc.checkin_date = ? ORDER BY dc.created_at DESC',
       [checkinDate]
     );
     if (results.length === 0) return [];
@@ -283,31 +251,20 @@ module.exports = {
   getCheckinHistory() {
     if (IS_VERCEL) {
       const dateMap = {};
-      inMemoryCheckins.forEach(c => {
-        dateMap[c.checkin_date] = (dateMap[c.checkin_date] || 0) + 1;
-      });
-      return Object.entries(dateMap)
-        .map(([date, total]) => ({ date, total }))
-        .sort((a, b) => b.date.localeCompare(a.date));
+      inMemoryCheckins.forEach(c => { dateMap[c.checkin_date] = (dateMap[c.checkin_date] || 0) + 1; });
+      return Object.entries(dateMap).map(([date, total]) => ({ date, total })).sort((a, b) => b.date.localeCompare(a.date));
     }
-    
-    const results = db.exec(
-      `SELECT checkin_date, COUNT(*) as total FROM daily_checkins GROUP BY checkin_date ORDER BY checkin_date DESC`
-    );
+    const results = db.exec('SELECT checkin_date, COUNT(*) as total FROM daily_checkins GROUP BY checkin_date ORDER BY checkin_date DESC');
     if (results.length === 0) return [];
     return results[0].values.map(row => ({ date: row[0], total: row[1] }));
   },
 
   undoCheckin(contactId, date = null) {
     const checkinDate = date || getTodayDate();
-    
     if (IS_VERCEL) {
-      inMemoryCheckins = inMemoryCheckins.filter(c => 
-        !(c.contact_id === parseInt(contactId) && c.checkin_date === checkinDate)
-      );
+      inMemoryCheckins = inMemoryCheckins.filter(c => !(c.contact_id === parseInt(contactId) && c.checkin_date === checkinDate));
       return { success: true, message: 'Check-in dibatalkan' };
     }
-    
     db.run('DELETE FROM daily_checkins WHERE contact_id = ? AND checkin_date = ?', [parseInt(contactId), checkinDate]);
     saveDatabase();
     return { success: true, message: 'Check-in dibatalkan' };
