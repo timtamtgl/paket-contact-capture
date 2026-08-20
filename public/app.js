@@ -281,6 +281,7 @@ clearImageBtn.addEventListener('click', () => {
   ocrResult.style.display = 'none';
   duplicateWarning.style.display = 'none';
   fileInput.value = '';
+  document.getElementById('cameraInput').value = '';
 });
 
 // ==================== DUPLICATE HANDLING ====================
