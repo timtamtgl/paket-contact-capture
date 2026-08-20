@@ -34,6 +34,9 @@ const todayDateEl = document.getElementById('todayDate');
 const tabs = document.querySelectorAll('.tab');
 const tabContents = document.querySelectorAll('.tab-content');
 
+// Get reference to client-side database
+const db = window.ClientDB;
+
 // ==================== TAB NAVIGATION ====================
 tabs.forEach(tab => {
   tab.addEventListener('click', () => {
@@ -183,7 +186,7 @@ fileInput.addEventListener('change', async (e) => {
   }
 });
 
-// ==================== LLM OCR ====================
+// ==================== LLM OCR (Server API - NVIDIA Vision) ====================
 document.getElementById('llmOcrBtn').addEventListener('click', async () => {
   if (!currentImageFile) {
     alert('⚠️ Silakan ambil atau upload foto terlebih dahulu!');
@@ -265,16 +268,10 @@ useExistingBtn.addEventListener('click', async () => {
   if (!existingContactId) return;
   
   try {
-    const response = await fetch('api/daily/checkin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact_id: existingContactId })
-    });
-    
-    const result = await response.json();
+    const result = await db.checkinContact(existingContactId);
     
     if (result.success) {
-      if (result.data.alreadyCheckedIn) {
+      if (result.alreadyCheckedIn) {
         alert('ℹ️ Kontak sudah di-check-in hari ini!');
       } else {
         alert('✅ Kontak sudah ada, berhasil di-check-in untuk hari ini!');
@@ -361,13 +358,12 @@ async function processImage() {
 // Check for duplicate contacts
 async function checkForDuplicates(name) {
   try {
-    const response = await fetch(`api/check-duplicate?name=${encodeURIComponent(name)}`);
-    const result = await response.json();
+    const similar = await db.findSimilarContacts(name);
     
-    if (result.success && result.data.length > 0) {
-      existingContactId = result.data[0].id;
+    if (similar.length > 0) {
+      existingContactId = similar[0].id;
       
-      similarContacts.innerHTML = result.data.map(contact => `
+      similarContacts.innerHTML = similar.map(contact => `
         <div class="similar-contact">
           <strong>${escapeHtml(contact.name)}</strong>
           <p>${escapeHtml(contact.address)}</p>
@@ -453,48 +449,49 @@ contactForm.addEventListener('submit', async (e) => {
     return;
   }
   
-  const formData = new FormData();
-  formData.append('name', document.getElementById('name').value);
-  formData.append('address', document.getElementById('address').value);
-  formData.append('phone', document.getElementById('phone').value);
-  formData.append('notes', document.getElementById('notes').value);
-  
+  const name = document.getElementById('name').value;
+  const address = document.getElementById('address').value;
+  const phone = document.getElementById('phone').value;
+  const notes = document.getElementById('notes').value;
   const lat = document.getElementById('latitude').value;
   const lng = document.getElementById('longitude').value;
-  if (lat) formData.append('latitude', lat);
-  if (lng) formData.append('longitude', lng);
-  
-  if (currentImageFile) {
-    formData.append('image', currentImageFile);
-  }
   
   try {
-    const response = await fetch('api/contacts', {
-      method: 'POST',
-      body: formData
-    });
+    // Check if contact already exists
+    const existing = await db.findContactByName(name);
     
-    const result = await response.json();
-    
-    if (result.success) {
-      const message = result.data.existing 
-        ? '✅ Kontak sudah ada! Berhasil di-check-in untuk hari ini.'
-        : '✅ Kontak baru berhasil disimpan dan di-check-in!';
-      
-      alert(message);
-      contactForm.reset();
-      imagePreview.style.display = 'none';
-      ocrResult.style.display = 'none';
-      duplicateWarning.style.display = 'none';
-      existingContactId = null;
-      currentImageFile = null;
-      currentImageDataUrl = '';
-      
-      // Switch to daily view
-      document.querySelector('[data-tab="daily"]').click();
+    if (existing) {
+      // Auto check-in
+      const checkinResult = await db.checkinContact(existing.id);
+      alert('✅ Kontak sudah ada! Berhasil di-check-in untuk hari ini.');
     } else {
-      alert('❌ Gagal menyimpan: ' + result.error);
+      // Create new contact
+      const result = await db.insertContact({
+        name,
+        address,
+        phone,
+        notes,
+        image_path: currentImageDataUrl || null,
+        latitude: lat ? parseFloat(lat) : null,
+        longitude: lng ? parseFloat(lng) : null
+      });
+      
+      // Auto check-in
+      await db.checkinContact(result.id);
+      alert('✅ Kontak baru berhasil disimpan dan di-check-in!');
     }
+    
+    // Reset form
+    contactForm.reset();
+    imagePreview.style.display = 'none';
+    ocrResult.style.display = 'none';
+    duplicateWarning.style.display = 'none';
+    existingContactId = null;
+    currentImageFile = null;
+    currentImageDataUrl = '';
+    
+    // Switch to daily view
+    document.querySelector('[data-tab="daily"]').click();
     
   } catch (error) {
     console.error('Error saving contact:', error);
@@ -505,12 +502,11 @@ contactForm.addEventListener('submit', async (e) => {
 // ==================== DAILY VIEW ====================
 async function loadDailyCheckins() {
   try {
-    const response = await fetch('api/daily');
-    const result = await response.json();
+    const checkins = await db.getDailyCheckins();
     
-    if (result.success && result.data.length > 0) {
-      dailyCount.textContent = result.data.length;
-      dailyList.innerHTML = result.data.map(contact => createDailyContactCard(contact)).join('');
+    if (checkins.length > 0) {
+      dailyCount.textContent = checkins.length;
+      dailyList.innerHTML = checkins.map(contact => createDailyContactCard(contact)).join('');
     } else {
       dailyCount.textContent = '0';
       dailyList.innerHTML = '<p class="empty-state">Belum ada kontak hari ini.<br>Ambil foto untuk menambah kontak!</p>';
@@ -566,13 +562,7 @@ async function undoCheckin(contactId) {
   if (!confirm('Yakin ingin membatalkan check-in ini?')) return;
   
   try {
-    const response = await fetch('api/daily/checkin', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact_id: contactId })
-    });
-    
-    const result = await response.json();
+    const result = await db.undoCheckin(contactId);
     
     if (result.success) {
       loadDailyCheckins();
@@ -600,21 +590,11 @@ async function updateLocation(contactId) {
       const { latitude, longitude } = position.coords;
       
       try {
-        const response = await fetch(`api/contacts/${contactId}/location`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ latitude, longitude })
-        });
+        const result = await db.updateContactLocation(contactId, latitude, longitude);
         
-        const result = await response.json();
-        
-        if (result.success) {
-          alert(`✅ Lokasi berhasil diperbarui!\n📍 ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-          loadDailyCheckins();
-          loadAllContacts();
-        } else {
-          alert('❌ Gagal: ' + result.error);
-        }
+        alert(`✅ Lokasi berhasil diperbarui!\n📍 ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+        loadDailyCheckins();
+        loadAllContacts();
         
       } catch (error) {
         console.error('Error updating location:', error);
@@ -652,12 +632,10 @@ async function updateLocation(contactId) {
 // ==================== ALL CONTACTS ====================
 async function loadAllContacts(query = '') {
   try {
-    const url = query ? `/api/search?q=${encodeURIComponent(query)}` : '/api/contacts';
-    const response = await fetch(url);
-    const result = await response.json();
+    const contacts = query ? await db.searchContacts(query) : await db.getAllContacts();
     
-    if (result.success && result.data.length > 0) {
-      allContactsList.innerHTML = result.data.map(contact => createAllContactCard(contact)).join('');
+    if (contacts.length > 0) {
+      allContactsList.innerHTML = contacts.map(contact => createAllContactCard(contact)).join('');
     } else {
       allContactsList.innerHTML = '<p class="empty-state">Tidak ada kontak ditemukan</p>';
     }
@@ -711,16 +689,10 @@ function createAllContactCard(contact) {
 
 async function checkinExisting(contactId) {
   try {
-    const response = await fetch('api/daily/checkin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact_id: contactId })
-    });
-    
-    const result = await response.json();
+    const result = await db.checkinContact(contactId);
     
     if (result.success) {
-      if (result.data.alreadyCheckedIn) {
+      if (result.alreadyCheckedIn) {
         alert('ℹ️ Sudah di-check-in hari ini!');
       } else {
         alert('✅ Berhasil di-check-in!');
@@ -740,11 +712,7 @@ async function deleteContact(id) {
   if (!confirm('Yakin ingin menghapus kontak ini?')) return;
   
   try {
-    const response = await fetch(`api/contacts/${id}`, {
-      method: 'DELETE'
-    });
-    
-    const result = await response.json();
+    const result = await db.deleteContact(id);
     
     if (result.success) {
       loadAllContacts();
@@ -769,11 +737,10 @@ searchInput.addEventListener('input', (e) => {
 // ==================== HISTORY ====================
 async function loadHistory() {
   try {
-    const response = await fetch('api/daily/history');
-    const result = await response.json();
+    const history = await db.getCheckinHistory();
     
-    if (result.success && result.data.length > 0) {
-      historyList.innerHTML = result.data.map(item => `
+    if (history.length > 0) {
+      historyList.innerHTML = history.map(item => `
         <div class="history-item" onclick="loadDayCheckins('${item.date}')">
           <span class="history-date">📅 ${formatDate(item.date)}</span>
           <span class="history-count">${item.total} kontak</span>
@@ -801,29 +768,26 @@ function formatDate(dateStr) {
 
 async function loadDayCheckins(date) {
   try {
-    const response = await fetch(`api/daily?date=${date}`);
-    const result = await response.json();
+    const checkins = await db.getDailyCheckins(date);
     
-    if (result.success) {
-      const modal = document.createElement('div');
-      modal.className = 'modal';
-      modal.innerHTML = `
-        <div class="modal-content">
-          <h3>📅 ${formatDate(date)}</h3>
-          <p>${result.data.length} kontak di-check-in</p>
-          <div class="modal-list">
-            ${result.data.map(c => `
-              <div class="modal-item">
-                <strong>${escapeHtml(c.name)}</strong>
-                <p>${escapeHtml(c.address)}</p>
-              </div>
-            `).join('')}
-          </div>
-          <button class="btn btn-primary" onclick="this.closest('.modal').remove()">Tutup</button>
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-content">
+        <h3>📅 ${formatDate(date)}</h3>
+        <p>${checkins.length} kontak di-check-in</p>
+        <div class="modal-list">
+          ${checkins.map(c => `
+            <div class="modal-item">
+              <strong>${escapeHtml(c.name)}</strong>
+              <p>${escapeHtml(c.address)}</p>
+            </div>
+          `).join('')}
         </div>
-      `;
-      document.body.appendChild(modal);
-    }
+        <button class="btn btn-primary" onclick="this.closest('.modal').remove()">Tutup</button>
+      </div>
+    `;
+    document.body.appendChild(modal);
     
   } catch (error) {
     console.error('Error loading day checkins:', error);
