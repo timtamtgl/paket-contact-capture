@@ -58,14 +58,18 @@
           <button id="stopCamera" class="btn btn-danger" style="display:none;">⏹️ Matikan</button>
         </div>
         
-        <!-- Or Upload -->
+        <!-- Or Upload/Camera -->
         <div class="divider">
           <span>atau</span>
         </div>
         
         <div class="upload-area" id="uploadArea">
-          <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none;">
-          <button id="uploadBtn" class="btn btn-secondary">📁 Upload Foto</button>
+          <input type="file" id="fileInput" accept="image/*" style="display:none;">
+          <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;">
+          <div class="button-group">
+            <button id="uploadBtn" class="btn btn-secondary">📁 Pilih dari Galeri</button>
+            <button id="cameraInputBtn" class="btn btn-primary">📷 Ambil dari Kamera</button>
+          </div>
           <p class="hint">Format: JPG, PNG, GIF, WebP (Maks 10MB)</p>
         </div>
 

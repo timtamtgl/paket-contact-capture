@@ -172,7 +172,27 @@ uploadBtn.addEventListener('click', () => {
   fileInput.click();
 });
 
+document.getElementById('cameraInputBtn').addEventListener('click', () => {
+  document.getElementById('cameraInput').click();
+});
+
+// Handle file selection from gallery
 fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    showLoading(true, 'Mengompresi gambar...');
+    const compressed = await compressImage(file);
+    currentImageFile = compressed.file;
+    currentImageDataUrl = compressed.dataUrl;
+    previewImg.src = currentImageDataUrl;
+    imagePreview.style.display = 'block';
+    processImage();
+    showLoading(false);
+  }
+});
+
+// Handle file selection from camera
+document.getElementById('cameraInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (file) {
     showLoading(true, 'Mengompresi gambar...');
