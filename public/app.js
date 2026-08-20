@@ -862,6 +862,184 @@ if ('geolocation' in navigator) {
   );
 }
 
+// ==================== BULK IMPORT ====================
+let parsedContacts = [];
+
+// Parse text to extract contacts
+function parseBulkText(text) {
+  const contacts = [];
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  
+  let currentName = '';
+  let currentAddress = '';
+  
+  for (const line of lines) {
+    // Check for "Nama: ..." format
+    const nameMatch = line.match(/^nama[:\s]+(.+)/i);
+    const addressMatch = line.match(/^alamat[:\s]+(.+)/i);
+    
+    if (nameMatch) {
+      // If we have previous contact, save it
+      if (currentName) {
+        contacts.push({ name: currentName, address: currentAddress || 'Tidak ada alamat' });
+      }
+      currentName = nameMatch[1].trim();
+      currentAddress = '';
+    } else if (addressMatch) {
+      currentAddress = addressMatch[1].trim();
+    } else if (line.includes(',') || line.includes(' - ') || line.includes('–')) {
+      // Check for "Nama, Alamat" or "Nama - Alamat" format
+      let parts;
+      if (line.includes(' - ') || line.includes('–')) {
+        parts = line.split(/\s[-–]\s/);
+      } else {
+        // Split by first comma that's followed by something that looks like an address
+        const commaIndex = line.indexOf(',');
+        if (commaIndex > 0) {
+          parts = [line.substring(0, commaIndex).trim(), line.substring(commaIndex + 1).trim()];
+        } else {
+          parts = [line];
+        }
+      }
+      
+      if (parts.length >= 2) {
+        // Save previous if exists
+        if (currentName) {
+          contacts.push({ name: currentName, address: currentAddress || 'Tidak ada alamat' });
+        }
+        currentName = parts[0].trim();
+        currentAddress = parts.slice(1).join(', ').trim();
+      } else if (parts[0].length > 0) {
+        // Might be just a name or address
+        if (!currentName) {
+          currentName = parts[0];
+        } else {
+          currentAddress = parts[0];
+          contacts.push({ name: currentName, address: currentAddress });
+          currentName = '';
+          currentAddress = '';
+        }
+      }
+    } else if (line.length > 2) {
+      // Could be a name or address
+      if (!currentName) {
+        currentName = line;
+      } else if (!currentAddress) {
+        currentAddress = line;
+        contacts.push({ name: currentName, address: currentAddress });
+        currentName = '';
+        currentAddress = '';
+      }
+    }
+  }
+  
+  // Don't forget the last contact
+  if (currentName) {
+    contacts.push({ name: currentName, address: currentAddress || 'Tidak ada alamat' });
+  }
+  
+  return contacts;
+}
+
+// Parse button
+document.getElementById('parseBulkBtn').addEventListener('click', () => {
+  const text = document.getElementById('bulkInput').value;
+  if (!text.trim()) {
+    alert('⚠️ Silakan paste teks terlebih dahulu!');
+    return;
+  }
+  
+  parsedContacts = parseBulkText(text);
+  
+  if (parsedContacts.length === 0) {
+    alert('❌ Tidak ditemukan kontak dalam teks. Pastikan format benar.');
+    return;
+  }
+  
+  // Show preview
+  document.getElementById('bulkCount').textContent = parsedContacts.length;
+  document.getElementById('bulkPreviewList').innerHTML = parsedContacts.map((c, i) => `
+    <div class="contact-item" style="padding:12px;">
+      <strong>${i + 1}. ${escapeHtml(c.name)}</strong>
+      <div class="address">📍 ${escapeHtml(c.address)}</div>
+    </div>
+  `).join('');
+  
+  document.getElementById('bulkPreview').style.display = 'block';
+  document.getElementById('bulkResult').style.display = 'none';
+});
+
+// Import button
+document.getElementById('bulkImportBtn').addEventListener('click', async () => {
+  if (parsedContacts.length === 0) return;
+  
+  showLoading(true, 'Import kontak...');
+  
+  let imported = 0;
+  let skipped = 0;
+  let errors = 0;
+  
+  for (const contact of parsedContacts) {
+    try {
+      // Check if already exists
+      const existing = await db.findContactByName(contact.name);
+      
+      if (existing) {
+        // Auto check-in
+        await db.checkinContact(existing.id);
+        skipped++;
+      } else {
+        // Insert new contact
+        const result = await db.insertContact({
+          name: contact.name,
+          address: contact.address,
+          phone: null,
+          notes: null,
+          image_path: null,
+          latitude: null,
+          longitude: null
+        });
+        // Auto check-in
+        await db.checkinContact(result.id);
+        imported++;
+      }
+    } catch (error) {
+      console.error('Error importing:', error);
+      errors++;
+    }
+  }
+  
+  showLoading(false);
+  
+  // Show result
+  document.getElementById('bulkPreview').style.display = 'none';
+  document.getElementById('bulkResult').style.display = 'block';
+  document.getElementById('bulkResultContent').innerHTML = `
+    <div class="ocr-status success">
+      ✅ Import selesai!<br><br>
+      📥 <strong>${imported}</strong> kontak baru di-import<br>
+      ⏭️ <strong>${skipped}</strong> kontak sudah ada (di-check-in)<br>
+      ❌ <strong>${errors}</strong> error
+    </div>
+  `;
+  
+  parsedContacts = [];
+});
+
+// Cancel button
+document.getElementById('bulkCancelBtn').addEventListener('click', () => {
+  document.getElementById('bulkPreview').style.display = 'none';
+  parsedContacts = [];
+});
+
+// Done button
+document.getElementById('bulkDoneBtn').addEventListener('click', () => {
+  document.getElementById('bulkResult').style.display = 'none';
+  document.getElementById('bulkInput').value = '';
+  // Switch to daily view
+  document.querySelector('[data-tab="daily"]').click();
+});
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   updateDateDisplay();

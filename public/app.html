@@ -34,6 +34,7 @@
     <!-- Tab Navigation -->
     <nav class="tabs">
       <button class="tab active" data-tab="capture">📷 Ambil Foto</button>
+      <button class="tab" data-tab="import">📝 Import List</button>
       <button class="tab" data-tab="daily">📅 Hari Ini</button>
       <button class="tab" data-tab="contacts">📋 Semua Kontak</button>
       <button class="tab" data-tab="history">📆 Riwayat</button>
@@ -128,6 +129,37 @@
           
           <button type="submit" class="btn btn-primary btn-block">💾 Simpan & Check-in Hari Ini</button>
         </form>
+      </div>
+    </section>
+
+    <!-- Bulk Import Section -->
+    <section id="import" class="tab-content">
+      <div class="card">
+        <h2>📝 Import Kontak dari Teks</h2>
+        <p class="hint">Paste list nama dan alamat, lalu klik Import. Format per baris: <strong>Nama, Alamat</strong> atau <strong>Nama - Alamat</strong></p>
+        
+        <div class="form-group">
+          <textarea id="bulkInput" rows="10" placeholder="Contoh format:&#10;&#10;Budi Santoso, Jl. Merdeka No. 10, Jakarta&#10;Siti Rahayu - Jl. Sudirman No. 25, Bandung&#10;Andi Prasetyo, Jl. Gatot Subroto No. 5, Surabaya&#10;&#10;Atau format:&#10;Nama: Budi Santoso&#10;Alamat: Jl. Merdeka No. 10&#10;&#10;Nama: Siti Rahayu&#10;Alamat: Jl. Sudirman No. 25"></textarea>
+        </div>
+        
+        <button id="parseBulkBtn" class="btn btn-primary btn-block">🔍 Parse & Preview</button>
+        
+        <!-- Preview Result -->
+        <div id="bulkPreview" style="display:none;">
+          <h3>📋 Preview (<span id="bulkCount">0</span> kontak ditemukan)</h3>
+          <div id="bulkPreviewList" class="contact-list"></div>
+          
+          <div class="button-group" style="margin-top:16px;">
+            <button id="bulkImportBtn" class="btn btn-success btn-block">💾 Import Semua & Check-in</button>
+            <button id="bulkCancelBtn" class="btn btn-danger btn-block">❌ Batal</button>
+          </div>
+        </div>
+        
+        <!-- Import Result -->
+        <div id="bulkResult" style="display:none;">
+          <div id="bulkResultContent"></div>
+          <button id="bulkDoneBtn" class="btn btn-primary btn-block" style="margin-top:16px;">✅ Selesai</button>
+        </div>
       </div>
     </section>
 
