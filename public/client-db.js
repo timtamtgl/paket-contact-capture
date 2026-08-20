@@ -112,7 +112,7 @@ class ClientDB {
     });
   }
 
-  async updateContact(id, { name, address, phone, notes, latitude, longitude }) {
+  async updateContact(id, { name, address, phone, notes, latitude, longitude, location_manually_set }) {
     await this.ensureReady();
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction(STORE_CONTACTS, 'readwrite');
@@ -130,7 +130,8 @@ class ClientDB {
           phone: phone || null,
           notes: notes || null,
           latitude: latitude !== undefined ? latitude : existing.latitude,
-          longitude: longitude !== undefined ? longitude : existing.longitude
+          longitude: longitude !== undefined ? longitude : existing.longitude,
+          location_manually_set: location_manually_set !== undefined ? location_manually_set : existing.location_manually_set
         };
 
         const putRequest = store.put(updated);
@@ -154,6 +155,7 @@ class ClientDB {
 
         existing.latitude = latitude;
         existing.longitude = longitude;
+        existing.location_manually_set = true; // Mark as manually updated
 
         const putRequest = store.put(existing);
         putRequest.onsuccess = () => resolve(existing);

@@ -540,11 +540,14 @@ async function loadDailyCheckins() {
 }
 
 function createDailyContactCard(contact) {
-  // Create Google Maps link
+  // Create Google Maps link - always default to address search
+  // Coordinates only used after explicit location update
   let mapsLink = '';
-  if (contact.latitude && contact.longitude) {
+  if (contact.location_manually_set && contact.latitude && contact.longitude) {
+    // Use coordinates only if user explicitly updated location
     mapsLink = `https://www.google.com/maps?q=${contact.latitude},${contact.longitude}`;
   } else if (contact.address) {
+    // Default: search by address
     mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contact.address)}`;
   }
   
@@ -556,8 +559,10 @@ function createDailyContactCard(contact) {
   // Location status
   const hasLocation = contact.latitude && contact.longitude;
   const locationStatus = hasLocation 
-    ? `<div class="meta"><span>📍 ${contact.latitude.toFixed(6)}, ${contact.longitude.toFixed(6)}</span></div>`
-    : `<div class="meta location-missing"><span>⚠️ Lokasi belum diatur</span></div>`;
+    ? (contact.location_manually_set 
+        ? `<div class="meta"><span>📍 ${contact.latitude.toFixed(6)}, ${contact.longitude.toFixed(6)} ✅</span></div>`
+        : `<div class="meta"><span>📍 ${contact.latitude.toFixed(6)}, ${contact.longitude.toFixed(6)} (otomatis)</span></div>`)
+    : `<div class="meta location-missing"><span>⚠️ Lokasi belum diatur - Klik Update Lokasi</span></div>`;
   
   return `
     <div class="contact-item daily">
@@ -611,7 +616,19 @@ async function updateLocation(contactId) {
       const { latitude, longitude } = position.coords;
       
       try {
-        const result = await db.updateContactLocation(contactId, latitude, longitude);
+        // Get contact first to update it with location_manually_set flag
+        const contact = await db.getContactById(contactId);
+        if (contact) {
+          await db.updateContact(contactId, {
+            name: contact.name,
+            address: contact.address,
+            phone: contact.phone,
+            notes: contact.notes,
+            latitude: latitude,
+            longitude: longitude,
+            location_manually_set: true
+          });
+        }
         
         alert(`✅ Lokasi berhasil diperbarui!\n📍 ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
         loadDailyCheckins();
@@ -668,11 +685,14 @@ async function loadAllContacts(query = '') {
 }
 
 function createAllContactCard(contact) {
-  // Create Google Maps link
+  // Create Google Maps link - always default to address search
+  // Coordinates only used after explicit location update
   let mapsLink = '';
-  if (contact.latitude && contact.longitude) {
+  if (contact.location_manually_set && contact.latitude && contact.longitude) {
+    // Use coordinates only if user explicitly updated location
     mapsLink = `https://www.google.com/maps?q=${contact.latitude},${contact.longitude}`;
   } else if (contact.address) {
+    // Default: search by address
     mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contact.address)}`;
   }
   
@@ -685,8 +705,10 @@ function createAllContactCard(contact) {
   // Location status
   const hasLocation = contact.latitude && contact.longitude;
   const locationStatus = hasLocation 
-    ? `<div class="meta"><span>📍 ${contact.latitude.toFixed(6)}, ${contact.longitude.toFixed(6)}</span></div>`
-    : `<div class="meta location-missing"><span>⚠️ Lokasi belum diatur</span></div>`;
+    ? (contact.location_manually_set 
+        ? `<div class="meta"><span>📍 ${contact.latitude.toFixed(6)}, ${contact.longitude.toFixed(6)} ✅</span></div>`
+        : `<div class="meta"><span>📍 ${contact.latitude.toFixed(6)}, ${contact.longitude.toFixed(6)} (otomatis)</span></div>`)
+    : `<div class="meta location-missing"><span>⚠️ Lokasi belum diatur - Klik Update Lokasi</span></div>`;
   
   return `
     <div class="contact-item">
